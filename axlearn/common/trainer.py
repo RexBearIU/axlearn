@@ -624,7 +624,7 @@ class SpmdTrainer(Module):
 
                         self._step = self._step + 1
                         self.vlog(3, "Start step %s", self.step)
-                        with self._record_event(measurement.Event.STEP):
+                        with self._record_event(measurement.Event.STEP, self.step):
                             output = self._run_step(
                                 utils.host_to_global_array(
                                     input_batch,
@@ -638,7 +638,7 @@ class SpmdTrainer(Module):
                             )
                         self.vlog(3, "Done step %s", self.step)
                         num_steps += 1
-                        if num_steps % 100 == 0:
+                        if num_steps % 1 == 0:
                             now = time.perf_counter()
                             average_step_time = (now - start_time) / num_steps
                             self._step_log("Average step time: %s seconds", average_step_time)
@@ -1111,7 +1111,7 @@ class SpmdTrainer(Module):
             # Run the compiled function.
             self._trainer_state, outputs = compiled_train_step_fn(self.trainer_state, input_batch)
 
-        if self.step % 100 == 0 or 0 <= self.step <= 5:
+        if self.step % 10 == 0 or 0 <= self.step <= 5:
             self._step_log(
                 "loss=%s aux=%s",
                 outputs["loss"],
