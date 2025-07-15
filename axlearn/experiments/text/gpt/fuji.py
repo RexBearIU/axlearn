@@ -376,7 +376,7 @@ def get_trainer_kwargs(
 
         trainer_kwargs = dict(
             model_kwargs=dict(
-                num_layers=12, # To prevent OOM on TPU v6e-16.
+                num_layers=32, # To prevent OOM on TPU v6e-16.
                 hidden_dim=128 * 32,
                 num_heads=32,
                 num_kv_heads=num_kv_heads,
@@ -481,7 +481,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
+                                mesh_shape=mesh_shape_from_axes(data=4, fsdp=128)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
@@ -867,7 +867,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
+                                mesh_shape=mesh_shape_from_axes(data=4, fsdp=128)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={

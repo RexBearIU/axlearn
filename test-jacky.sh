@@ -3,16 +3,19 @@
 set -xe
 
 export NUM_REPLICAS=${NUM_REPLICAS:-2}
-export JOBSET_NAME=${JOBSET_NAME:-$USER-jax0-5-3-orbax-$(date +%Y%m%d-%H%M%S)}
-# export JOBSET_NAME=jackyf-jax0-5-3-orbax-20250714-075642
+# export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-ici-data-2-$(date +%Y%m%d-%H%M%S)}
+export JOBSET_NAME=jackyf-orbax-ici-data-2-20250715-082521
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
 export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-16"}
 # Switch to tpu-v6e-256-4 if on scale cluster
-export MESH_SELECTOR=${MESH:-"tpu-v6e-16"}
-export CONFIG=${CONFIG:-"fuji-7B-v3-flash-orbax"}
+export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
+export CONFIG=${CONFIG:-"fuji-7B-v2-flash-orbax"}
 export PROJECT_ID=$(gcloud config get project)
+export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
+export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
+# export DATA_DIR={gs://tess-dataloading-us-east5/}
 
 # Example for v6e-256
 # MESH_SELECTOR=tpu-v6e-256-4 INSTANCE_TYPE=tpu-v6e-256 ./test-orbax.sh
@@ -73,6 +76,6 @@ else
           --jax_backend=tpu \
           --mesh_selector=${MESH_SELECTOR} \
           --initialization_timeout=1200 \
-          --trace_at_steps=29,59,89,119,149,179,209,239,269,299,329,359,389,419,449,479,509,539,569,599,629,659,689,719
+          --trace_at_steps=50,101,105,150,201,205,250,301,305,350,401,405,450
 fi
 
