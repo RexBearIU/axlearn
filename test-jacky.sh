@@ -3,16 +3,20 @@
 set -xe
 
 export NUM_REPLICAS=${NUM_REPLICAS:-2}
-export JOBSET_NAME=${JOBSET_NAME:-$USER-jax0-5-3-orbax-$(date +%Y%m%d-%H%M%S)}
-# export JOBSET_NAME=jackyf-jax0-5-3-orbax-20250714-075642
+export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$(date +%Y%m%d-%H%M%S)}
+# export JOBSET_NAME=jackyf-150B-orbax-20250714-095933
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
-export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-16"}
+export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-256"}
 # Switch to tpu-v6e-256-4 if on scale cluster
-export MESH_SELECTOR=${MESH:-"tpu-v6e-16"}
-export CONFIG=${CONFIG:-"fuji-7B-v3-flash-orbax"}
+export MESH_SELECTOR=${MESH:-"tpu-v6e-256"}
+export CONFIG=${CONFIG:-"fuji-150B-v2-flash-orbax"}
 export PROJECT_ID=$(gcloud config get project)
+export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
+export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
+# export DATA_DIR={gs://tess-dataloading-us-east5/}
+# export DATA_DIR=${DATA_DIR:-gs://axlearn-public/tensorflow_datasets}
 
 # Example for v6e-256
 # MESH_SELECTOR=tpu-v6e-256-4 INSTANCE_TYPE=tpu-v6e-256 ./test-orbax.sh
@@ -44,11 +48,11 @@ if [[ "$CONFIG" == *"orbaxem"* ]]; then
         --bundler_spec=allow_dirty=True \
         --bundler_type=artifactregistry --bundler_spec=image=tpu \
         --bundler_spec=dockerfile=Dockerfile --bundler_spec=target=tpu \
-        -- "ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
+        -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch && ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --init_module=axlearn.common.checkpointer_orbax_emergency:local_ckpt_dir=/host-tmp/checkpoints \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
-          --trainer_dir=gs://${PROJECT_ID}-axlearn/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
+          --trainer_dir=${OUTPUT_DIR} \
           --data_dir=gs://axlearn-public/tensorflow_datasets  \
           --jax_backend=tpu \
           --mesh_selector=${MESH_SELECTOR} \
@@ -62,14 +66,16 @@ else
         --name=$JOBSET_NAME \
         --instance_type=${INSTANCE_TYPE} \
         --num_replicas=${NUM_REPLICAS} \
+        --queue=multislice-queue \
+        --priority_class=high \
         --bundler_spec=allow_dirty=True \
         --bundler_type=artifactregistry --bundler_spec=image=tpu \
         --bundler_spec=dockerfile=Dockerfile --bundler_spec=target=tpu \
-        -- "ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
+        -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch && ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
-          --trainer_dir=gs://${PROJECT_ID}-axlearn/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
-          --data_dir=gs://axlearn-public/tensorflow_datasets  \
+          --trainer_dir=${OUTPUT_DIR}/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
+          --data_dir=${DATA_DIR}  \
           --jax_backend=tpu \
           --mesh_selector=${MESH_SELECTOR} \
           --initialization_timeout=1200 \

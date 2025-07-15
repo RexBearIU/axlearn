@@ -201,7 +201,7 @@ class OrbaxCheckpointer(BaseCheckpointer):
         async_timeout_secs: int = 300
         max_concurrent_save_gb: Optional[int] = None
         max_concurrent_restore_gb: Optional[int] = None
-        enable_single_replica_ckpt_restoring: bool = True
+        enable_single_replica_ckpt_restoring: bool = False
 
     @classmethod
     def checkpoint_paths(cls, base_dir: str) -> List[str]:
