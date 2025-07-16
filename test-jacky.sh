@@ -3,14 +3,13 @@
 set -xe
 
 export NUM_REPLICAS=${NUM_REPLICAS:-2}
-# export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-ici-data-2-$(date +%Y%m%d-%H%M%S)}
-export JOBSET_NAME=jackyf-orbax-ici-data-2-20250715-082521
+export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-head-ici-data-1-$(date +%Y%m%d-%H%M%S)}
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
 export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-16"}
 # Switch to tpu-v6e-256-4 if on scale cluster
-export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
+export MESH_SELECTOR=${MESH:-"tpu-v6e-16"}
 export CONFIG=${CONFIG:-"fuji-7B-v2-flash-orbax"}
 export PROJECT_ID=$(gcloud config get project)
 export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
