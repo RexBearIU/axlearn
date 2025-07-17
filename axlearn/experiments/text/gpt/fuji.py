@@ -846,6 +846,11 @@ def get_trainer_kwargs(
             ),
         )
     elif model_size == "150B":
+        logging.info(
+            "******* DEBUGGING: number of devices: %s\n, train_batch_size: %s",
+            len(jax.devices()),
+            train_batch_size,
+        )
         trainer_kwargs = dict(
             model_kwargs=dict(
                 num_layers=80,
@@ -873,7 +878,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=64, model=4)
+                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
