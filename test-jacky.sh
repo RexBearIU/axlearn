@@ -7,10 +7,10 @@ export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-head-ici-data-1-$(date +%Y%m%d-%H%
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
-export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-16"}
+export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-256"}
 # Switch to tpu-v6e-256-4 if on scale cluster
-export MESH_SELECTOR=${MESH:-"tpu-v6e-16"}
-export CONFIG=${CONFIG:-"fuji-7B-v2-flash-orbax"}
+export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
+export CONFIG=${CONFIG:-"fuji-150B-v2-flash-orbax"}
 export PROJECT_ID=$(gcloud config get project)
 export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
 export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
@@ -63,6 +63,9 @@ else
         --runner_name gke_tpu_single \
         --name=$JOBSET_NAME \
         --instance_type=${INSTANCE_TYPE} \
+        --queue=multislice-queue \
+        --priority_class=very-high \
+        --service_account=axlearn-scale-testing \
         --num_replicas=${NUM_REPLICAS} \
         --bundler_spec=allow_dirty=True \
         --bundler_type=artifactregistry --bundler_spec=image=tpu \
@@ -70,11 +73,16 @@ else
         -- "ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
-          --trainer_dir=gs://${PROJECT_ID}-axlearn/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
-          --data_dir=gs://axlearn-public/tensorflow_datasets  \
+          --trainer_dir=${OUTPUT_DIR}/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
+          --data_dir=$DATA_DIR \
           --jax_backend=tpu \
           --mesh_selector=${MESH_SELECTOR} \
           --initialization_timeout=1200 \
-          --trace_at_steps=50,101,105,150,201,205,250,301,305,350,401,405,450
+          --trace_at_steps=50,101,105,150,201,205,250,301,305,350,401,405,450 \
+          --recorder_type=axlearn.cloud.gcp.measurement:goodput \
+          --recorder_spec=name=goodput_$JOBSET_NAME \
+          --recorder_spec=upload_dir=$OUTPUT_DIR/summaries \
+          --recorder_spec=upload_interval=60 \
+          --recorder_spec=rolling_window_size=3600,86400,259200
 fi
 
