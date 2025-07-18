@@ -2,7 +2,8 @@
 
 set -xe
 
-export NUM_REPLICAS=${NUM_REPLICAS:-2}
+export PROJECT_ID="cloud-tpu-best-effort-colo"
+export NUM_REPLICAS=${NUM_REPLICAS:-8}
 export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-head-ici-data-1-$(date +%Y%m%d-%H%M%S)}
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
@@ -11,11 +12,12 @@ export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-256"}
 # Switch to tpu-v6e-256-4 if on scale cluster
 export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
 export CONFIG=${CONFIG:-"fuji-150B-v2-flash-orbax"}
-export PROJECT_ID=$(gcloud config get project)
-export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
-export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
-# export DATA_DIR={gs://tess-dataloading-us-east5/}
+# export OUTPUT_DIR=${OUTPUT_DIR:-gs://largescale-axlearn-testing}
+export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-us-east5}
+# export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
+export DATA_DIR="gs://tess-dataloading-us-east5/tensorflow_datasets"
 
+cd sujeeth/axlearn/
 # Example for v6e-256
 # MESH_SELECTOR=tpu-v6e-256-4 INSTANCE_TYPE=tpu-v6e-256 ./test-orbax.sh
 
@@ -46,7 +48,7 @@ if [[ "$CONFIG" == *"orbaxem"* ]]; then
         --bundler_spec=allow_dirty=True \
         --bundler_type=artifactregistry --bundler_spec=image=tpu \
         --bundler_spec=dockerfile=Dockerfile --bundler_spec=target=tpu \
-        -- "ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
+        -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch; ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --init_module=axlearn.common.checkpointer_orbax_emergency:local_ckpt_dir=/host-tmp/checkpoints \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
@@ -70,7 +72,7 @@ else
         --bundler_spec=allow_dirty=True \
         --bundler_type=artifactregistry --bundler_spec=image=tpu \
         --bundler_spec=dockerfile=Dockerfile --bundler_spec=target=tpu \
-        -- "ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
+        -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch; ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
           --trainer_dir=${OUTPUT_DIR}/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
