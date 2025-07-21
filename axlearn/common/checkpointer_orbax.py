@@ -17,8 +17,8 @@ import numpy as np
 import orbax.checkpoint as ocp
 import tensorflow as tf
 from absl import logging
-from orbax.checkpoint.type_handlers import ArrayHandler
 from orbax.checkpoint._src.metadata import array_metadata_store as array_metadata_store_lib
+from orbax.checkpoint._src.serialization.type_handlers import ArrayHandler
 
 from axlearn.common import utils
 from axlearn.common.checkpointer import (
@@ -193,6 +193,8 @@ class OrbaxCheckpointer(BaseCheckpointer):
             keep_every_n_steps: If set, keep a checkpoint every n steps.
             validation_type: Checkpoint validation during restore.
             async_timeout_secs: Timeout for async barrier in seconds.
+            enable_single_replica_ckpt_restoring: Whether to enable single-replica checkpoint restoring.
+            use_replica_parallel: Whether to use replica parallel checkpointing.
         """
 
         keep_last_n: int = 1
@@ -202,6 +204,7 @@ class OrbaxCheckpointer(BaseCheckpointer):
         max_concurrent_save_gb: Optional[int] = None
         max_concurrent_restore_gb: Optional[int] = None
         enable_single_replica_ckpt_restoring: bool = True
+        use_replica_parallel: bool = False
 
     @classmethod
     def checkpoint_paths(cls, base_dir: str) -> List[str]:
@@ -292,9 +295,22 @@ class OrbaxCheckpointer(BaseCheckpointer):
 
         Checkpoint saving is handled by `orbax` checkpoint manager.
         """
+        cfg: OrbaxCheckpointer.Config = self.config
         spec = self._get_spec(step=step, state=state)
         assert self._eval_summaries is None, self._eval_summaries
         self._eval_summaries = copy.deepcopy(evaler_summaries or {})
+
+        # Store the original handler to restore it later
+        original_handler = None
+        if not cfg.use_replica_parallel:
+            # Get the current handler for jax.Array
+            original_handler = ocp.type_handlers.get_type_handler(jax.Array)
+            # Register a new ArrayHandler with use_replica_parallel=False
+            custom_handler = ArrayHandler(
+                use_replica_parallel=False,
+                array_metadata_store=array_metadata_store_lib.Store(),
+            )
+            ocp.type_handlers.register_type_handler(jax.Array, custom_handler, override=True)
 
         try:
             # Note that save() waits for prior serialization to finish.
@@ -308,6 +324,7 @@ class OrbaxCheckpointer(BaseCheckpointer):
                     # https://orbax.readthedocs.io/en/latest/optimized_checkpointing.html#custom-chunk-sizes
                     # https://orbax.readthedocs.io/en/latest/optimized_checkpointing.html#customizing-data-file-size
                     state=ocp.args.PyTreeSave(item=state),
+                    #state=ocp.args.PyTreeSave(item=state,ocdbt_target_data_file_size=500*1024*1024),
                 ),
             )
             # Exit early after pre-emption, equivalent to sys.exit():
@@ -316,6 +333,9 @@ class OrbaxCheckpointer(BaseCheckpointer):
                 self._manager.wait_until_finished()
                 raise SystemExit(f"Exiting after saving checkpoint at {step=} due to pre-emption.")
         finally:
+            # Restore the original handler if we modified it
+            if not cfg.use_replica_parallel and original_handler is not None:
+                ocp.type_handlers.register_type_handler(jax.Array, original_handler, override=True)
             self._eval_summaries = None
 
     def restore(
@@ -328,7 +348,7 @@ class OrbaxCheckpointer(BaseCheckpointer):
 
         cfg: OrbaxCheckpointer.Config = self.config
 
-        replica_axis_index = 1
+        replica_axis_index = 0
 
         if cfg.enable_single_replica_ckpt_restoring:
             array_handler = ocp.type_handlers.SingleReplicaArrayHandler(
