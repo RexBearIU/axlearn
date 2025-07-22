@@ -257,7 +257,7 @@ def get_trainer_kwargs(
     max_sequence_length = MAX_SEQUENCE_LENGTH[version]
     train_batch_size = tokens_per_batch // max_sequence_length
     logging.info(
-        "******* DEBUGGING: tokens_per_batch: %s\n, max_sequence_length: %s",
+        "******* DEBUGGING: tokens_per_batch: %s, max_sequence_length: %s",
         tokens_per_batch,
         max_sequence_length,
     )
@@ -847,7 +847,7 @@ def get_trainer_kwargs(
         )
     elif model_size == "150B":
         logging.info(
-            "******* DEBUGGING: number of devices: %s\n, train_batch_size: %s",
+            "******* DEBUGGING: number of devices: %s, train_batch_size: %s",
             len(jax.devices()),
             train_batch_size,
         )

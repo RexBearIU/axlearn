@@ -379,6 +379,69 @@ class SpmdTrainer(Module):
     def trainer_state_partition_specs(self):
         return self._trainer_state_partition_specs
 
+    @contextlib.contextmanager
+    def _record_event(self, event: measurement.Event, *args, **kwargs):
+        """A helper to record an event if a recorder is configured."""
+        if self._recorder:
+            with self._recorder.record_event(event, *args, **kwargs) as event_manager:
+                yield event_manager
+        else:
+            yield
+
+    def _device_init(self, devices: Optional[np.ndarray] = None):
+        """Initializes the device mesh and other device-dependent configurations."""
+        cfg = self.config
+        if cfg.model.dtype is None:
+            raise ValueError(f"dtype must be explicitly specified for {self.path()}.model")
+        if cfg.model.param_init is None:
+            cfg.model.param_init = DefaultInitializer.default_config()
+            logging.info(
+                "model.param_init is not specified. Default to DefaultInitializer: %s",
+                cfg.model.param_init,
+            )
+
+        self._per_param_train_dtype = maybe_instantiate(
+            canonicalize_per_param_dtype(cfg.train_dtype)
+        )
+
+        # Create the device mesh.
+        if devices is None:
+            self._step_log(
+                "Devices: global=%s local=%s %s",
+                jax.device_count(),
+                jax.local_device_count(),
+                [device.platform for device in jax.local_devices()],
+            )
+        else:
+            local_devices = [d for d in devices.flatten() if d.process_index == jax.process_index()]
+            self._step_log(
+                "Devices: global=%s local=%s %s",
+                len(devices),
+                len(local_devices),
+                [device.platform for device in local_devices],
+            )
+        self._step_log("Mesh shape: %s", cfg.mesh_shape)
+        devices = (
+            utils.create_device_mesh(mesh_shape=cfg.mesh_shape) if devices is None else devices
+        )
+        mesh = jax.sharding.Mesh(devices, cfg.mesh_axis_names)
+        self._step_log("Global mesh: %s", mesh)
+        self._mesh = mesh
+        self._context_manager: Callable[[], ContextManager] = (
+            maybe_instantiate(cfg.context_manager) or contextlib.nullcontext
+        )
+        xsc_check_policy = None
+        if cfg.xsc_check_policy:
+            if jax.default_backend() != "tpu":
+                # XSC is currently only supported on TPU XLA backend.
+                logging.warning(
+                    "xsc_check_policy was set for non-TPU XLA backend. Running without XSC."
+                )
+            else:
+                xsc_check_policy = maybe_instantiate(cfg.xsc_check_policy)
+        self._xsc_check_policy: Optional[Callable[[int], bool]] = xsc_check_policy
+        self._compiled_train_step: Optional[jax.stages.Compiled] = None
+
     def _train_step_input_partition_specs(self):
         # Note that subclasses may override this method to set a partition spec for pjit which is
         # different from that of the input partition spec.
@@ -592,8 +655,9 @@ class SpmdTrainer(Module):
             )
 
             # Prepare training.
-            if not self._prepare_training(prng_key):
-                return None
+            with self._record_event(measurement.Event.TRAINING_PREPARATION):
+                if not self._prepare_training(prng_key):
+                    return None
 
             self._is_initialized = True
 
