@@ -59,6 +59,10 @@ def default_xla_options(
             # further if you see "Allocator failed to allocate". A feature
             # to dynamically allocate may come later: b/380514965
             megascale_grpc_premap_memory_bytes=17179869184,
+            # RapidEye output directory for debugging purposes,
+            megascale_rapid_eye_error_digest_log_path="/output/rapideye/",
+            # enable megascale debug port.
+            megascale_debug_port=8081,
             # Flag controlling the maximum number of overlapping host offloadings.
             xla_tpu_host_transfer_overlap_limit=24,
             # Flag controlling the maximum number of overlapping cross-DCN send/recv.
@@ -163,7 +167,15 @@ def default_xla_options(
             int(v)
             continue
         except ValueError:
-            assert v in [True, False, "true", "false", "megachip_tccontrol", "10m"], (k, v)
+            assert v in [
+                True,
+                False,
+                "true",
+                "false",
+                "megachip_tccontrol",
+                "10m",
+                "/output/rapideye/",
+            ], (k, v)
 
     return options
 
@@ -302,15 +314,16 @@ def infer_xla_performance_flags(
     if current_configuration in mesh_configurations_for_sparse_core_offloading:
         flags = dict(
             # Must disable continuation fusion to enable sparse core offloading.
-            xla_tpu_enable_async_collective_fusion_fuse_all_gather="false",
-            xla_tpu_enable_async_collective_fusion_fuse_all_reduce="false",
-            xla_tpu_enable_async_collective_fusion_fuse_reduce_scatter="false",
-            xla_tpu_enable_sparse_core_collective_offload_all_gather="true",
-            xla_tpu_enable_sparse_core_collective_offload_reduce_scatter="true",
-            xla_tpu_enable_sparse_core_collective_offload_all_reduce="true",
-            xla_tpu_enable_all_gather_offload_tracing="true",
-            xla_tpu_enable_reduce_scatter_offload_tracing="true",
-            xla_tpu_enable_all_reduce_offload_tracing="true",
+            # AXLEARN TESTING NOTE: We are disabling this to test for SparseCore related issues.
+            # xla_tpu_enable_async_collective_fusion_fuse_all_gather="false",
+            # xla_tpu_enable_async_collective_fusion_fuse_all_reduce="false",
+            # xla_tpu_enable_async_collective_fusion_fuse_reduce_scatter="false",
+            # xla_tpu_enable_sparse_core_collective_offload_all_gather="true",
+            # xla_tpu_enable_sparse_core_collective_offload_reduce_scatter="true",
+            # xla_tpu_enable_sparse_core_collective_offload_all_reduce="true",
+            # xla_tpu_enable_all_gather_offload_tracing="true",
+            # xla_tpu_enable_reduce_scatter_offload_tracing="true",
+            # xla_tpu_enable_all_reduce_offload_tracing="true",
         )
         # 64x4 and 32x8 are non-native mesh shapes for v6e-256. The only native native for v6e-256
         # is 16x16 (or 256). The available bandwidth of non-native mesh shapes is half of that
