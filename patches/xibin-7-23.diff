@@ -1,0 +1,155 @@
+From 9ec1e9c9fc61c9db2baf232bb0b84922ee517996 Mon Sep 17 00:00:00 2001
+From: Xibin Liu <xibin@google.com>
+Date: Wed, 23 Jul 2025 20:02:32 +0000
+Subject: [PATCH] Tune the batch size and shape with pipeline
+
+---
+ axlearn/common/checkpointer_orbax.py   |  7 +++++-
+ axlearn/experiments/text/gpt/common.py |  4 ++--
+ axlearn/experiments/text/gpt/fuji.py   | 30 ++++++++++++++++++++++----
+ test-jacky.sh                          |  4 ++--
+ 4 files changed, 36 insertions(+), 9 deletions(-)
+
+diff --git a/axlearn/common/checkpointer_orbax.py b/axlearn/common/checkpointer_orbax.py
+index e260507..27d5a39 100644
+--- a/axlearn/common/checkpointer_orbax.py
++++ b/axlearn/common/checkpointer_orbax.py
+@@ -220,6 +220,11 @@ class OrbaxCheckpointer(BaseCheckpointer):
+         cfg: OrbaxCheckpointer.Config = self.config
+         save_policy = cfg.save_policy.instantiate()
+ 
++ 
++        logging.info("enable_single_replica_ckpt_restoring %s; replica_axis_index %s",
++            cfg.enable_single_replica_ckpt_restoring,
++            cfg.replica_axis_index,
++        )
+         if cfg.enable_single_replica_ckpt_restoring:
+             array_handler = ocp.type_handlers.SingleReplicaArrayHandler(
+                 replica_axis_index=cfg.replica_axis_index, 
+@@ -442,4 +447,4 @@ def _replica_devices(device_array: np.ndarray, replica_axis_idx: int):
+     idx = _find_idx(device_array, replica_axis_idx)
+     replica_result = np.take(device_array, idx, axis=replica_axis_idx)
+     # return np.expand_dims(replica_result, axis=replica_axis_idx)
+-    return replica_result
+\ No newline at end of file
++    return replica_result
+diff --git a/axlearn/experiments/text/gpt/common.py b/axlearn/experiments/text/gpt/common.py
+index 19411ca..a867614 100644
+--- a/axlearn/experiments/text/gpt/common.py
++++ b/axlearn/experiments/text/gpt/common.py
+@@ -754,7 +754,7 @@ def get_trainer_config_fn(
+             )
+             ckpt_config.keep_period = min(max_step, keep_every_n_steps)
+             ckpt_config.keep_last_n = 3
+-            ckpt_config.enable_single_replica_ckpt_restoring = False
++            ckpt_config.enable_single_replica_ckpt_restoring = True
+             cfg.checkpointer = ckpt_config
+ 
+         cfg.summary_writer.write_every_n_steps = min(eval_every_n_steps, 100)
+@@ -787,4 +787,4 @@ class SourceBuilder(Protocol):
+     def __call__(
+         self, *, vocab_size: int, max_sequence_length: int
+     ) -> Nested[ConfigOr[input_tf_data.BuildDatasetFn]]:
+-        raise NotImplementedError(type(self))
+\ No newline at end of file
++        raise NotImplementedError(type(self))
+diff --git a/axlearn/experiments/text/gpt/fuji.py b/axlearn/experiments/text/gpt/fuji.py
+index 71c27e3..6bf453f 100644
+--- a/axlearn/experiments/text/gpt/fuji.py
++++ b/axlearn/experiments/text/gpt/fuji.py
+@@ -252,7 +252,8 @@ def get_trainer_kwargs(
+     flash_attention: bool = False,
+ ) -> dict[str, Any]:
+     """Construct default trainer kwargs given a model size."""
+-    tokens_per_batch = TOKENS_PER_BATCH[version]
++    # tokens_per_batch = TOKENS_PER_BATCH[version]
++    tokens_per_batch = 32 * (1024**2)
+     max_step = TOTAL_TOKENS[version][model_size] // tokens_per_batch
+     max_sequence_length = MAX_SEQUENCE_LENGTH[version]
+     train_batch_size = tokens_per_batch // max_sequence_length
+@@ -262,6 +263,25 @@ def get_trainer_kwargs(
+         max_sequence_length,
+     )
+ 
++    # model_parallelism * fsdp == num_chips_in_trillium (256)
++    model_parallelism_256 = 4
++    fsdp_256 = 64
++    if len(jax.devices()) == 2**15:
++        model_parallelism_256 = 8
++        fsdp_256 = 32
++    if len(jax.devices()) > 2**15:
++        model_parallelism_256 = 16
++        fsdp_256 = 16
++
++    slice_num_256 = len(jax.devices())//256
++    logging.info(
++        "******* DEBUGGING: For v6e-256: number of slices: %s\n, fsdp: %s, model: %s",
++        slice_num_256,
++        fsdp_256,
++        model_parallelism_256,
++    )
++
++
+     # Whether to use grouped query attention.
+     num_kv_heads = None
+     if version in (Version.V3, Version.V3_TIKTOKEN):
+@@ -488,7 +508,7 @@ def get_trainer_kwargs(
+                     ChainConfigModifier.default_config().set(
+                         config_modifiers=[
+                             MeshShapeModifier.default_config().set(
+-                                mesh_shape=mesh_shape_from_axes(pipeline=4, data=-1, fsdp=128)
++                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1, fsdp=128)
+                             ),
+                             RematSpecModifier.default_config().set(
+                                 remat_policies={
+@@ -746,7 +766,8 @@ def get_trainer_kwargs(
+                     ChainConfigModifier.default_config().set(
+                         config_modifiers=[
+                             MeshShapeModifier.default_config().set(
+-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
++                                #mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
++                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1 ,fsdp=256, model=1)
+                             ),
+                             RematSpecModifier.default_config().set(
+                                 remat_policies={
+@@ -851,6 +872,7 @@ def get_trainer_kwargs(
+             len(jax.devices()),
+             train_batch_size,
+         )
++
+         trainer_kwargs = dict(
+             model_kwargs=dict(
+                 num_layers=80,
+@@ -878,7 +900,7 @@ def get_trainer_kwargs(
+                     ChainConfigModifier.default_config().set(
+                         config_modifiers=[
+                             MeshShapeModifier.default_config().set(
+-                                mesh_shape=mesh_shape_from_axes(data=-1 ,fsdp=32, model=8)
++                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1 ,fsdp=fsdp_256, model=model_parallelism_256)
+                             ),
+                             RematSpecModifier.default_config().set(
+                                 remat_policies={
+diff --git a/test-jacky.sh b/test-jacky.sh
+index e8fa772..bd9325b 100644
+--- a/test-jacky.sh
++++ b/test-jacky.sh
+@@ -4,7 +4,7 @@ set -xe
+ 
+ export PROJECT_ID="cloud-tpu-best-effort-colo"
+ export NUM_REPLICAS=${NUM_REPLICAS:-32}
+-export JOBSET_NAME=${JOBSET_NAME:-$USER-long-run-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
++export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
+ # export JOBSET_NAME="jackyf-orbax-4-20250723-002241"
+ export BASTION_TIER=disabled
+ export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
+@@ -67,7 +67,7 @@ else
+         --max_tries=100 \
+         --instance_type=${INSTANCE_TYPE} \
+         --queue=multislice-queue \
+-        --priority_class=very-high \
++        --priority_class=high \
+         --service_account=axlearn-scale-testing \
+         --num_replicas=${NUM_REPLICAS} \
+         --bundler_spec=allow_dirty=True \
+-- 
+2.50.0.727.gbf7dc18ff4-goog

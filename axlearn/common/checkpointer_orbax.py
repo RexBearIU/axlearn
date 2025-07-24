@@ -220,6 +220,11 @@ class OrbaxCheckpointer(BaseCheckpointer):
         cfg: OrbaxCheckpointer.Config = self.config
         save_policy = cfg.save_policy.instantiate()
 
+ 
+        logging.info("enable_single_replica_ckpt_restoring %s; replica_axis_index %s",
+            cfg.enable_single_replica_ckpt_restoring,
+            cfg.replica_axis_index,
+        )
         if cfg.enable_single_replica_ckpt_restoring:
             array_handler = ocp.type_handlers.SingleReplicaArrayHandler(
                 replica_axis_index=cfg.replica_axis_index, 

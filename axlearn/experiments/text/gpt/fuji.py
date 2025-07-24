@@ -252,7 +252,8 @@ def get_trainer_kwargs(
     flash_attention: bool = False,
 ) -> dict[str, Any]:
     """Construct default trainer kwargs given a model size."""
-    tokens_per_batch = TOKENS_PER_BATCH[version]
+    # tokens_per_batch = TOKENS_PER_BATCH[version]
+    tokens_per_batch = 32 * (1024**2)
     max_step = TOTAL_TOKENS[version][model_size] // tokens_per_batch
     max_sequence_length = MAX_SEQUENCE_LENGTH[version]
     train_batch_size = tokens_per_batch // max_sequence_length
@@ -261,6 +262,25 @@ def get_trainer_kwargs(
         tokens_per_batch,
         max_sequence_length,
     )
+
+    # model_parallelism * fsdp == num_chips_in_trillium (256)
+    model_parallelism_256 = 4
+    fsdp_256 = 64
+    if len(jax.devices()) == 2**15:
+        model_parallelism_256 = 8
+        fsdp_256 = 32
+    if len(jax.devices()) > 2**15:
+        model_parallelism_256 = 16
+        fsdp_256 = 16
+
+    slice_num_256 = len(jax.devices())//256
+    logging.info(
+        "******* DEBUGGING: For v6e-256: number of slices: %s\n, fsdp: %s, model: %s",
+        slice_num_256,
+        fsdp_256,
+        model_parallelism_256,
+    )
+
 
     # Whether to use grouped query attention.
     num_kv_heads = None
@@ -379,8 +399,6 @@ def get_trainer_kwargs(
         )
     elif model_size == "7B":
 
-        gbs = len(jax.devices())
-
         trainer_kwargs = dict(
             model_kwargs=dict(
                 num_layers=32,
@@ -393,7 +411,7 @@ def get_trainer_kwargs(
             ),
             learner_kwargs=dict(peak_lr=3e-4, weight_decay=0.1),
             max_sequence_length=max_sequence_length,
-            train_batch_size=gbs,
+            train_batch_size=train_batch_size,
             max_step=max_step,
             mesh_shape=mesh_shape_from_axes(data=-1, fsdp=8),
             mesh_rules=(
@@ -488,7 +506,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(pipeline=4, data=-1, fsdp=128)
+                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1, fsdp=64, model=4)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
@@ -746,7 +764,8 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
+                                #mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
+                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1 ,fsdp=256, model=1)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
@@ -851,6 +870,7 @@ def get_trainer_kwargs(
             len(jax.devices()),
             train_batch_size,
         )
+
         trainer_kwargs = dict(
             model_kwargs=dict(
                 num_layers=80,
@@ -879,6 +899,7 @@ def get_trainer_kwargs(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
                                 mesh_shape=mesh_shape_from_axes(data=-1 ,fsdp=32, model=8)
+                                # mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1 ,fsdp=fsdp_256, model=model_parallelism_256)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={

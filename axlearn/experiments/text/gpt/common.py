@@ -754,7 +754,7 @@ def get_trainer_config_fn(
             )
             ckpt_config.keep_period = min(max_step, keep_every_n_steps)
             ckpt_config.keep_last_n = 3
-            ckpt_config.enable_single_replica_ckpt_restoring = False
+            ckpt_config.enable_single_replica_ckpt_restoring = True
             cfg.checkpointer = ckpt_config
 
         cfg.summary_writer.write_every_n_steps = min(eval_every_n_steps, 100)

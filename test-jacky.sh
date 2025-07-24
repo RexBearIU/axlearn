@@ -4,7 +4,7 @@ set -xe
 
 export PROJECT_ID="cloud-tpu-best-effort-colo"
 export NUM_REPLICAS=${NUM_REPLICAS:-32}
-export JOBSET_NAME=${JOBSET_NAME:-$USER-long-run-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
+export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
 # export JOBSET_NAME="jackyf-orbax-4-20250723-002241"
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
@@ -67,7 +67,7 @@ else
         --max_tries=100 \
         --instance_type=${INSTANCE_TYPE} \
         --queue=multislice-queue \
-        --priority_class=very-high \
+        --priority_class=high \
         --service_account=axlearn-scale-testing \
         --num_replicas=${NUM_REPLICAS} \
         --bundler_spec=allow_dirty=True \
