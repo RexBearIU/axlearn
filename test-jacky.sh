@@ -3,16 +3,16 @@
 set -xe
 
 export PROJECT_ID="cloud-tpu-best-effort-colo"
-export NUM_REPLICAS=${NUM_REPLICAS:-32}
-export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
-# export JOBSET_NAME="jackyf-orbax-4-20250723-002241"
+export NUM_REPLICAS=${NUM_REPLICAS:-4}
+# export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
+export JOBSET_NAME="jackyf-orbax-4-20250725-0056"
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
 export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-256"}
 # Switch to tpu-v6e-256-4 if on scale cluster
 export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
-export CONFIG=${CONFIG:-"fuji-150B-v2-flash-orbax"}
+export CONFIG=${CONFIG:-"fuji-7B-v2-flash-orbax"}
 export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-flat-us-east5}
 # export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-us-east5}
 # export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
