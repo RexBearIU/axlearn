@@ -253,7 +253,7 @@ def get_trainer_kwargs(
 ) -> dict[str, Any]:
     """Construct default trainer kwargs given a model size."""
     # tokens_per_batch = TOKENS_PER_BATCH[version]
-    tokens_per_batch = 2 * (1024**2)
+    tokens_per_batch = 8 * (1024**2)
     max_step = TOTAL_TOKENS[version][model_size] // tokens_per_batch
     max_sequence_length = MAX_SEQUENCE_LENGTH[version]
     train_batch_size = tokens_per_batch // max_sequence_length
@@ -399,56 +399,6 @@ def get_trainer_kwargs(
         )
     elif model_size == "7B":
 
-        ##################################################################################
-        max_sequence_length = MAX_SEQUENCE_LENGTH[Version.V2]  # 4096
-
-        # model_parallelism * fsdp == num_chips_in_trillium (256)
-        model_parallelism = 4
-        fsdp = 64
-
-        assert fsdp * model_parallelism == 256
-
-        current_pdbs = 0.5
-        train_batch_size = int(current_pdbs * len(jax.devices()))
-
-        # 16 * (1024**2) / 4096 = 4096
-        tokens_per_batch = int(train_batch_size * max_sequence_length)
-
-        # 32M tokens is the max global tokens we can train on.
-        assert tokens_per_batch <= 32 * (1024**2)
-
-        # 1 / model_parallelism = 1 / 4 = 0.25
-        min_pdbs = 1 / model_parallelism
-        max_pdbs = 1
-
-        # More than 1 pdbs causes an OOM.
-        assert current_pdbs < max_pdbs
-        assert current_pdbs >= min_pdbs
-
-        # maximum number of devices we can use this config on =
-        # train_batch_size // min_pdbs = 4096 / 0.25 = 16384
-        max_devices = int(train_batch_size // min_pdbs)
-
-        assert isinstance(train_batch_size, int)
-        assert isinstance(tokens_per_batch, int)
-
-        logging.info(
-            (
-                "******* DEBUGGING: max_sequence_length: %s, model_parallelism: %s,"
-                " fsdp: %s, current_pdbs: %s, train_batch_size: %s,"
-                " tokens_per_batch: %s, min_pdbs: %s, max_pdbs: %s, max_devices: %s"
-            ),
-            max_sequence_length,
-            model_parallelism,
-            fsdp,
-            current_pdbs,
-            train_batch_size,
-            tokens_per_batch,
-            min_pdbs,
-            max_pdbs,
-            max_devices,
-        )
-        ##################################################################################
 
         trainer_kwargs = dict(
             model_kwargs=dict(
@@ -557,7 +507,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=fsdp, model=model_parallelism),
+                                mesh_shape=mesh_shape_from_axes(data=-1, fsdp=32, model=1),
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
@@ -994,7 +944,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                 mesh_shape=mesh_shape_from_axes(data=-1, fsdp=fsdp, model=model_parallelism),
+                                 mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1, fsdp=16),
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={

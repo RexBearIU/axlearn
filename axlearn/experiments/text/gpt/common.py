@@ -770,7 +770,7 @@ def get_trainer_config_fn(
         # "pipeline" axis (for pipeline parallelism).
         # TODO(markblee): Remove this and use `cfg.input.input_partitioner`.
         cfg.batch_axis_names = tuple(
-            el for el in mesh_axis_names if el not in ("model", "pipeline")
+            el for el in mesh_axis_names if el not in ("model")
         )
         cfg.mesh_rules = mesh_rules
         # Maybe load state.
