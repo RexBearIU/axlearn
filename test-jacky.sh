@@ -3,8 +3,9 @@
 set -xe
 
 export PROJECT_ID="cloud-tpu-best-effort-colo"
-export NUM_REPLICAS=${NUM_REPLICAS:-16}
-export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
+export NUM_REPLICAS=${NUM_REPLICAS:-64}
+# export JOBSET_NAME=${JOBSET_NAME:-$USER-orbax-$NUM_REPLICAS-$(date +%Y%m%d-%H%M)}
+export JOBSET_NAME="sujinesh-64-orbax-3"
 export BASTION_TIER=disabled
 export GKE_CLUSTER=$(axlearn gcp config | grep gke_cluster | awk '{ print $3 }' | tr -d '"')
 # Switch to tpu-v6e-256 if on scale cluster
@@ -12,8 +13,8 @@ export INSTANCE_TYPE=${INSTANCE_TYPE:-"tpu-v6e-256"}
 # Switch to tpu-v6e-256-4 if on scale cluster
 export MESH_SELECTOR=${MESH:-"tpu-v6e-256-2"}
 export CONFIG=${CONFIG:-"fuji-150B-v2-flash-orbax"}
-export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-flat-us-east5}
-# export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-us-east5}
+# export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-flat-us-east5}
+export OUTPUT_DIR=${OUTPUT_DIR:-gs://tess-checkpoints-us-east5/sujinesh}
 # export DATA_DIR="gs://tess-apple-southamerica-west1/tensorflow_datasets"
 export DATA_DIR="gs://tess-dataloading-us-east5/tensorflow_datasets"
 
@@ -75,7 +76,7 @@ else
         -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch; ulimit -n 1048576; ulimit -c 0; python3 -c 'import jax; jax.devices()'; python3 -m axlearn.common.launch_trainer_main" \
           --module=text.gpt.c4_trainer \
           --config=${CONFIG} \
-          --trainer_dir=${OUTPUT_DIR}/${JOBSET_NAME}-nr-${NUM_REPLICAS}/ \
+          --trainer_dir=${OUTPUT_DIR}/${JOBSET_NAME}/ \
           --data_dir=$DATA_DIR \
           --jax_backend=tpu \
           --mesh_selector=${MESH_SELECTOR} \
@@ -85,6 +86,7 @@ else
           --recorder_spec=name=goodput_$JOBSET_NAME \
           --recorder_spec=upload_dir=$OUTPUT_DIR/summaries \
           --recorder_spec=upload_interval=60 \
-          --recorder_spec=rolling_window_size=3600,86400,259200
+          --recorder_spec=rolling_window_size=3600,86400,259200; 
+          exit_code=$?; echo \"Trainer exited with code: $exit_code\"; exit $exit_code
 fi
 

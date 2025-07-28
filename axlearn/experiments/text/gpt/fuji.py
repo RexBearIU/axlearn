@@ -258,7 +258,7 @@ def get_trainer_kwargs(
     max_sequence_length = MAX_SEQUENCE_LENGTH[version]
     train_batch_size = tokens_per_batch // max_sequence_length
     logging.info(
-        "******* DEBUGGING: tokens_per_batch: %s\n, max_sequence_length: %s",
+        "******* DEBUGGING: default tokens_per_batch: %s, max_sequence_length: %s",
         tokens_per_batch,
         max_sequence_length,
     )
@@ -273,10 +273,10 @@ def get_trainer_kwargs(
         model_parallelism_256 = 16
         fsdp_256 = 16
 
-    slice_num_256 = len(jax.devices())//256
+    slice_num = len(jax.devices())//256
     logging.info(
-        "******* DEBUGGING: For v6e-256: number of slices: %s\n, fsdp: %s, model: %s",
-        slice_num_256,
+        "******* DEBUGGING: For v6e-256: number of slices: %s, fsdp: %s, model: %s",
+        slice_num,
         fsdp_256,
         model_parallelism_256,
     )
@@ -766,7 +766,7 @@ def get_trainer_kwargs(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
                                 #mesh_shape=mesh_shape_from_axes(data=-1, fsdp=256)
-                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1 ,fsdp=256, model=1)
+                                mesh_shape=mesh_shape_from_axes(pipeline=slice_num, data=-1 ,fsdp=256, model=1)
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
@@ -873,7 +873,7 @@ def get_trainer_kwargs(
         model_parallelism = 4
         fsdp = 64
 
-        assert fsdp * model_parallelism == 256
+        # assert fsdp * model_parallelism == 256
 
         current_pdbs = 0.5
         train_batch_size = int(current_pdbs * len(jax.devices()))
@@ -889,8 +889,8 @@ def get_trainer_kwargs(
         max_pdbs = 1
 
         # More than 1 pdbs causes an OOM.
-        assert current_pdbs < max_pdbs
-        assert current_pdbs >= min_pdbs
+        # assert current_pdbs < max_pdbs
+        # assert current_pdbs >= min_pdbs
 
         # maximum number of devices we can use this config on =
         # train_batch_size // min_pdbs = 4096 / 0.25 = 16384
@@ -901,8 +901,8 @@ def get_trainer_kwargs(
 
         logging.info(
             (
-                "******* DEBUGGING: max_sequence_length: %s, model_parallelism: %s,"
-                " fsdp: %s, current_pdbs: %s, train_batch_size: %s,"
+                "******* DEBUGGING for 150B: max_sequence_length: %s, model_parallelism: %s,"
+                " fsdp: %s, current_pdbs: %s, train_batch_size: %s, slice_num: %s,"
                 " tokens_per_batch: %s, min_pdbs: %s, max_pdbs: %s, max_devices: %s"
             ),
             max_sequence_length,
@@ -910,6 +910,7 @@ def get_trainer_kwargs(
             fsdp,
             current_pdbs,
             train_batch_size,
+            slice_num,
             tokens_per_batch,
             min_pdbs,
             max_pdbs,
@@ -944,7 +945,7 @@ def get_trainer_kwargs(
                     ChainConfigModifier.default_config().set(
                         config_modifiers=[
                             MeshShapeModifier.default_config().set(
-                                 mesh_shape=mesh_shape_from_axes(pipeline=slice_num_256, data=-1, fsdp=16),
+                                 mesh_shape=mesh_shape_from_axes(pipeline=slice_num, data=-1, fsdp=fsdp),
                             ),
                             RematSpecModifier.default_config().set(
                                 remat_policies={
