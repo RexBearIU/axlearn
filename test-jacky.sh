@@ -1,12 +1,17 @@
 # Use this branch exactly - https://github.com/SujeethJinesh/axlearn/pull/1
 
-export NUM_REPLICAS=64;
+export NUM_REPLICAS=2;
 
 export BASTION_TIER=disabled
 
-export CLUSTER=bodaborg-v6e-256;
+# export CLUSTER=bodaborg-v6e-256;
 
-export NAME=sujinesh-64-orbax-3 && export OUTPUT_DIR=gs://tess-checkpoints-flat-us-east5/sujinesh/$NAME && export DATA_DIR=gs://tess-dataloading-us-east5/tensorflow_datasets;
+# Debug cluster
+export CLUSTER=bodaborg-v6e-256-lcscld-c;
+
+# export NAME=jacky-$NUM_REPLICAS-orbax && export OUTPUT_DIR=gs://tess-checkpoints-flat-us-east5/jacky/$NAME && export DATA_DIR=gs://tess-dataloading-us-east5/tensorflow_datasets;
+# Debug cluster
+export NAME=jacky-$NUM_REPLICAS-orbax && export OUTPUT_DIR=gs://largescale-axlearn-testing/jacky/$NAME && export DATA_DIR=gs://tess-apple-southamerica-west1/tensorflow_datasets;
 
 axlearn gcp bundle --name=${NAME} \
         --bundler_spec=allow_dirty=True \
@@ -29,7 +34,7 @@ axlearn gcp launch run --cluster=${CLUSTER} \
         --bundler_spec=dockerfile=Dockerfile --bundler_spec=target=tpu \
         -- "patch /opt/venv/lib/python3.10/site-packages/jax/experimental/shard_map.py -p0 < patches/shard_map.py.patch; python3 -m axlearn.common.launch_trainer_main \
           --module=text.gpt.c4_trainer \
-          --config=fuji-150B-v2-flash \
+          --config=fuji-7B-v2-flash \
           --trainer_dir=${OUTPUT_DIR} \
           --data_dir=${DATA_DIR}  \
           --jax_backend=tpu \
